@@ -165,8 +165,7 @@ def get_latest_finance_news(max_age_hours=2):
 
     # 1.5. Fetch from Nitter Search RSS Feeds (US Finance & Target handles)
     search_queries = [
-        "finance lang:en near:US",
-        "https://x.com/AkshaySGulati"
+        "finance lang:en near:US"
     ]
     import urllib.parse
     for query_item in search_queries:
