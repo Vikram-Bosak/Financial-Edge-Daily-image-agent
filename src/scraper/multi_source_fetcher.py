@@ -1,0 +1,245 @@
+import feedparser
+import logging
+import time
+import os
+import requests
+import re
+from urllib.parse import urlparse
+
+def is_finance_news_site(url):
+    """
+    Checks if a URL belongs to a reputable finance/business news source.
+    """
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower()
+    
+    allowed_domains = [
+        "bloomberg.com", "reuters.com", "cnbc.com", "wsj.com", "forbes.com",
+        "ft.com", "marketwatch.com", "finance.yahoo.com", "yahoo.com", "businessinsider.com",
+        "investopedia.com", "barrons.com", "nytimes.com", "wsj.net", "bloomberg.net", "cnn.com", "apnews.com"
+    ]
+    
+    for allowed in allowed_domains:
+        if domain == allowed or domain.endswith("." + allowed):
+            return True
+            
+    return False
+
+def get_og_image(url):
+    """
+    Fetches the article URL (decoding it if it's a Google News link) and extracts the OpenGraph image tag.
+    """
+    target_url = url
+    if "news.google.com" in url:
+        try:
+            from googlenewsdecoder import new_decoderv1
+            decoded_res = new_decoderv1(url)
+            if decoded_res.get("status") and decoded_res.get("decoded_url"):
+                target_url = decoded_res["decoded_url"]
+                logging.info(f"Successfully decoded Google News URL to: {target_url}")
+        except Exception as e:
+            logging.warning(f"Failed to decode Google News link using googlenewsdecoder: {e}")
+
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+        }
+        logging.info(f"Attempting to extract og:image from: {target_url}")
+        r = requests.get(target_url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            html = r.text
+            match = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+            if not match:
+                match = re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', html, re.IGNORECASE)
+            if match:
+                img_url = match.group(1)
+                logging.info(f"Found og:image: {img_url}")
+                return img_url
+    except Exception as e:
+        logging.warning(f"Failed to scrape og:image from {target_url}: {e}")
+    return None
+
+FEEDS = [
+    "https://news.google.com/rss/search?q=%22stock+market%22+OR+%22finance%22+OR+%22economy%22+trending&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=%22investing%22+OR+%22inflation%22+OR+%22interest+rates%22+latest&hl=en-US&gl=US&ceid=US:en"
+]
+
+def get_latest_finance_news(max_age_hours=2):
+    """
+    Fetches the latest Financial & Economic news from Google News RSS and Twitter (via Nitter).
+    Filters out news older than max_age_hours.
+    Sorts by newest first.
+    Returns a list of dictionaries with 'title', 'link', 'description', and 'image_url'.
+    """
+    news_items = []
+    current_time = time.time()
+    max_age_seconds = max_age_hours * 3600
+
+    # 1. Fetch from Nitter RSS Feeds (Twitter alternative for official accounts)
+    nitter_instances = [
+        "https://nitter.cz",
+        "https://nitter.privacydev.net",
+        "https://nitter.net"
+    ]
+    official_users = ["FT", "CNBC", "WSJ", "Bloomberg", "Forbes"]
+    for user in official_users:
+        for instance in nitter_instances:
+            nitter_url = f"{instance}/{user}/rss"
+            logging.info(f"Scanning official Twitter feed on Nitter: {nitter_url}")
+            try:
+                feed = feedparser.parse(nitter_url)
+                if not feed.entries:
+                    continue
+                    
+                user_found = False
+                for entry in feed.entries:
+                    pub_time = None
+                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                        pub_time = time.mktime(entry.published_parsed)
+                    elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+                        pub_time = time.mktime(entry.updated_parsed)
+                    
+                    if not pub_time:
+                        continue
+                    
+                    age_seconds = current_time - pub_time
+                    if age_seconds < 0 or age_seconds > max_age_seconds:
+                        continue
+                        
+                    title = entry.title
+                    link = entry.link
+                    if instance in link:
+                        link = link.replace(instance, "https://twitter.com").replace("#m", "")
+                        
+                    description = getattr(entry, 'description', '')
+                    
+                    desc_lower = description.lower()
+                    if "video" in desc_lower or "gif" in desc_lower or ".mp4" in desc_lower:
+                        continue
+                    
+                    image_urls = []
+                    img_matches = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', description)
+                    for img in img_matches:
+                        if "/pic/media" in img:
+                            media_path = img.split("/pic/media%2F")[-1]
+                            import urllib.parse
+                            media_path = urllib.parse.unquote(media_path)
+                            image_urls.append(f"https://pbs.twimg.com/media/{media_path}")
+                        elif img.startswith("http"):
+                            image_urls.append(img)
+                            
+                    image_val = None
+                    if len(image_urls) > 1:
+                        image_val = image_urls
+                    elif len(image_urls) == 1:
+                        image_val = image_urls[0]
+                            
+                    news_items.append({
+                        "title": title[:100] + "..." if len(title) > 100 else title,
+                        "link": link,
+                        "description": description,
+                        "image_url": image_val,
+                        "timestamp": pub_time,
+                        "source": "TWITTER/NITTER"
+                    })
+                    user_found = True
+                
+                if user_found:
+                    break
+            except Exception as e:
+                logging.error(f"Error fetching from Nitter instance {instance} for {user}: {e}")
+
+    # 2. Fetch from Google News RSS Feeds
+    for rss_url in FEEDS:
+        logging.info(f"Scanning feed: {rss_url}")
+        try:
+            feed = feedparser.parse(rss_url)
+            for entry in feed.entries:
+                pub_time = None
+                if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                    pub_time = time.mktime(entry.published_parsed)
+                elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+                    pub_time = time.mktime(entry.updated_parsed)
+                
+                if not pub_time:
+                    continue
+                
+                age_seconds = current_time - pub_time
+                if age_seconds < 0 or age_seconds > max_age_seconds:
+                    continue
+                    
+                title = entry.title
+                link = entry.link
+                description = getattr(entry, 'description', '')
+                
+                # Check for general finance/economy relevance
+                title_lower = title.lower()
+                finance_keywords = ["stock", "market", "finance", "economy", "fed ", "inflation", "interest rate", "revenue", "earnings", "crypto", "bitcoin", "investment", "trade"]
+                if not any(x in title_lower for x in finance_keywords):
+                    continue
+                    
+                image_url = None
+                
+                # 1. Try media_content
+                if hasattr(entry, 'media_content'):
+                    max_width = 0
+                    for media in entry.media_content:
+                        if media.get('medium') == 'image':
+                            width = int(media.get('width', 0))
+                            if width > max_width:
+                                max_width = width
+                                image_url = media.get('url')
+                    if not image_url and len(entry.media_content) > 0:
+                        image_url = entry.media_content[0].get('url')
+                        
+                # 2. Try media_thumbnail
+                if not image_url and hasattr(entry, 'media_thumbnail'):
+                    if len(entry.media_thumbnail) > 0:
+                        image_url = entry.media_thumbnail[0].get('url')
+                        
+                # 3. Try enclosures
+                if not image_url and hasattr(entry, 'enclosures'):
+                    for enc in entry.enclosures:
+                        if enc.get('type', '').startswith('image/'):
+                            image_url = enc.get('href')
+                            break
+                
+                target_url = link
+                if "news.google.com" in link:
+                    try:
+                        from googlenewsdecoder import new_decoderv1
+                        decoded_res = new_decoderv1(link)
+                        if decoded_res.get("status") and decoded_res.get("decoded_url"):
+                            target_url = decoded_res["decoded_url"]
+                    except Exception:
+                        pass
+                
+                if not is_finance_news_site(target_url):
+                    logging.info(f"Skipping non-finance news site: {target_url}")
+                    continue
+                
+                # 4. Try scraping og:image from decoded publisher URL
+                if not image_url and target_url:
+                    image_url = get_og_image(target_url)
+                            
+                news_items.append({
+                    "title": title,
+                    "link": target_url,
+                    "description": description,
+                    "image_url": image_url,
+                    "timestamp": pub_time,
+                    "source": "GOOGLE_NEWS"
+                })
+                    
+        except Exception as e:
+            logging.error(f"Error fetching {rss_url}: {e}")
+
+    # Sort items by timestamp, newest first
+    news_items.sort(key=lambda x: x['timestamp'], reverse=True)
+    logging.info(f"Found {len(news_items)} fresh finance articles (under {max_age_hours} hours old).")
+    return news_items
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    news = get_latest_finance_news(max_age_hours=24)
+    logging.info(f"Test complete. Found {len(news)} items.")
