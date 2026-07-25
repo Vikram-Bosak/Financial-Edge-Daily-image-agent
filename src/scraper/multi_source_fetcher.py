@@ -81,7 +81,10 @@ def get_latest_finance_news(max_age_hours=2):
         "https://nitter.privacydev.net",
         "https://nitter.net"
     ]
-    official_users = ["FT", "CNBC", "WSJ", "Bloomberg", "Forbes"]
+    official_users = [
+        "NickTimiraos", "CNBC", "WSJ", "Bloomberg", "KobeissiLetter",
+        "charliebilello", "unusual_whales", "YahooFinance", "MarketWatch"
+    ]
     for user in official_users:
         for instance in nitter_instances:
             nitter_url = f"{instance}/{user}/rss"
