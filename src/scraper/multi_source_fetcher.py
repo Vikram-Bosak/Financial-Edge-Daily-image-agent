@@ -110,6 +110,7 @@ def get_latest_finance_news(max_age_hours=2):
                         continue
                         
                     # Convert Nitter link to standard Twitter URL
+                    title = entry.title
                     link = entry.link
                     if instance in link:
                         link = link.replace(instance, "https://twitter.com").replace("#m", "")
