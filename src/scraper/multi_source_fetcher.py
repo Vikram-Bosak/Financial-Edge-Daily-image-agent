@@ -109,12 +109,23 @@ def get_latest_finance_news(max_age_hours=2):
                     if age_seconds < 0 or age_seconds > max_age_seconds:
                         continue
                         
-                    title = entry.title
+                    # Convert Nitter link to standard Twitter URL
                     link = entry.link
                     if instance in link:
                         link = link.replace(instance, "https://twitter.com").replace("#m", "")
                         
                     description = getattr(entry, 'description', '')
+                    
+                    # Extract original news source URL from description links if present
+                    external_link = None
+                    a_matches = re.findall(r'href=["\'](https?://[^"\']+)["\']', description)
+                    for href in a_matches:
+                        href_lower = href.lower()
+                        if not any(x in href_lower for x in ["twitter.com", "t.co", "nitter", "pbs.twimg.com", "instagram.com", "youtube.com"]):
+                            external_link = href
+                            break
+                    if external_link:
+                        link = external_link
                     
                     desc_lower = description.lower()
                     if "video" in desc_lower or "gif" in desc_lower or ".mp4" in desc_lower:
@@ -183,6 +194,17 @@ def get_latest_finance_news(max_age_hours=2):
                     link = link.replace(instance, "https://twitter.com").replace("#m", "")
                     
                 description = getattr(entry, 'description', '')
+                
+                # Extract original news source URL from description links if present
+                external_link = None
+                a_matches = re.findall(r'href=["\'](https?://[^"\']+)["\']', description)
+                for href in a_matches:
+                    href_lower = href.lower()
+                    if not any(x in href_lower for x in ["twitter.com", "t.co", "nitter", "pbs.twimg.com", "instagram.com", "youtube.com"]):
+                        external_link = href
+                        break
+                if external_link:
+                    link = external_link
                 
                 desc_lower = description.lower()
                 if "video" in desc_lower or "gif" in desc_lower or ".mp4" in desc_lower:
