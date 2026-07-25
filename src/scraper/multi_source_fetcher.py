@@ -152,6 +152,75 @@ def get_latest_finance_news(max_age_hours=2):
             except Exception as e:
                 logging.error(f"Error fetching from Nitter instance {instance} for {user}: {e}")
 
+    # 1.5. Fetch from Nitter Search RSS Feed for "finance" query (US/English focus)
+    for instance in nitter_instances:
+        # Search query for finance from US location / English language
+        search_url = f"{instance}/search/rss?q=finance+lang%3Aen+near%3AUS"
+        logging.info(f"Scanning Twitter search on Nitter: {search_url}")
+        try:
+            feed = feedparser.parse(search_url)
+            if not feed.entries:
+                continue
+                
+            search_found = False
+            for entry in feed.entries:
+                pub_time = None
+                if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                    pub_time = time.mktime(entry.published_parsed)
+                elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
+                    pub_time = time.mktime(entry.updated_parsed)
+                
+                if not pub_time:
+                    continue
+                
+                age_seconds = current_time - pub_time
+                if age_seconds < 0 or age_seconds > max_age_seconds:
+                    continue
+                    
+                title = entry.title
+                link = entry.link
+                if instance in link:
+                    link = link.replace(instance, "https://twitter.com").replace("#m", "")
+                    
+                description = getattr(entry, 'description', '')
+                
+                desc_lower = description.lower()
+                if "video" in desc_lower or "gif" in desc_lower or ".mp4" in desc_lower:
+                    continue
+                
+                # Extract image URLs
+                image_urls = []
+                img_matches = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', description)
+                for img in img_matches:
+                    if "/pic/media" in img:
+                        media_path = img.split("/pic/media%2F")[-1]
+                        import urllib.parse
+                        media_path = urllib.parse.unquote(media_path)
+                        image_urls.append(f"https://pbs.twimg.com/media/{media_path}")
+                    elif img.startswith("http"):
+                        image_urls.append(img)
+                        
+                image_val = None
+                if len(image_urls) > 1:
+                    image_val = image_urls
+                elif len(image_urls) == 1:
+                    image_val = image_urls[0]
+                        
+                news_items.append({
+                    "title": title[:100] + "..." if len(title) > 100 else title,
+                    "link": link,
+                    "description": description,
+                    "image_url": image_val,
+                    "timestamp": pub_time,
+                    "source": "TWITTER/NITTER_SEARCH"
+                })
+                search_found = True
+            
+            if search_found:
+                break
+        except Exception as e:
+            logging.error(f"Error fetching from Nitter search instance {instance}: {e}")
+
     # 2. Fetch from Google News RSS Feeds
     for rss_url in FEEDS:
         logging.info(f"Scanning feed: {rss_url}")
