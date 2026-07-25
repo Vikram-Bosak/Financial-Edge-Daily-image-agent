@@ -55,6 +55,11 @@ def generate_content_from_article(title, description):
         for chunk in completion:
             if not chunk.choices:
                 continue
+            # Extract reasoning/thinking content if available (optional logging)
+            reasoning = getattr(chunk.choices[0].delta, "reasoning_content", None)
+            if reasoning:
+                # Optionally log or handle reasoning tokens
+                pass
             if chunk.choices[0].delta.content is not None:
                 response_text += chunk.choices[0].delta.content
                 
