@@ -68,8 +68,8 @@ def save_processed_trend(trend_title):
 def job():
     logging.info("Starting automated job for Financial Edge Daily...")
     
-    # Check feeds for articles up to 24 hours old so we have choices
-    news_items = get_latest_finance_news(max_age_hours=24)
+    # Check feeds for articles up to 2 hours old so we have choices
+    news_items = get_latest_finance_news(max_age_hours=2)
     if not news_items:
         logging.info("No fresh articles found.")
         return
