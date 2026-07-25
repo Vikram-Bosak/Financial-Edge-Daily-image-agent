@@ -1,9 +1,22 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-venv/
+*.py[cod]
+*$py.class
+
+# Environments
 .env
-output/
-assets/fonts/
-*.jpg
-*.jpeg
-*.png
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Local output / state
+output/post_*.jpg
+output/post_*.png
+output/post_*.webp
+
+# OS metadata
+.DS_Store
+Thumbs.db
