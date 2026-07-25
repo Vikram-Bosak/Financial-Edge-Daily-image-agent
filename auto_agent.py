@@ -86,10 +86,17 @@ def job():
         source_url = item.get("link", "")
         source_name = item.get("source", "NEWS")
         
-        # 1. Ensure only the original news article thumbnail is used
+        # 1. Ensure only the original news article thumbnail is used, or fetch fallback for Twitter
         if not image_url:
-            logging.warning(f"No original thumbnail image found for: {title}. Skipping article to preserve exact thumbnail rule.")
-            continue
+            if source_name == "TWITTER/NITTER":
+                logging.info(f"Twitter post has no image. Searching for related 'finance' image...")
+                image_url = get_related_image("finance")
+                if not image_url:
+                    logging.warning(f"No search image found for Twitter post: {title}. Skipping.")
+                    continue
+            else:
+                logging.warning(f"No original thumbnail image found for: {title}. Skipping article to preserve exact thumbnail rule.")
+                continue
         image_url_2 = None
         
         os.makedirs("output", exist_ok=True)

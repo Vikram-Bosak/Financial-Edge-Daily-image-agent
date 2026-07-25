@@ -44,8 +44,11 @@ def get_related_image(keyword, avoid_url=None):
     stop_words = {"to", "joins", "star", "in", "for", "gets", "with", "from", "on", "at", "by", "of", "and", "a", "an", "the", "about", "set", "is", "are", "was", "were", "to", "star", "direct", "talks"}
     filtered_words = [w for w in words if w.lower() not in stop_words]
     
-    base_query = " ".join(filtered_words[:3]) if len(filtered_words) > 3 else " ".join(filtered_words)
-    query = f"{base_query} finance stock market"
+    if keyword.lower().strip() == "finance":
+        query = "finance"
+    else:
+        base_query = " ".join(filtered_words[:3]) if len(filtered_words) > 3 else " ".join(filtered_words)
+        query = f"{base_query} finance stock market"
     
     logging.info(f"Searching for related image using query: '{query}'")
     
