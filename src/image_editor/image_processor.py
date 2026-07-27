@@ -307,7 +307,7 @@ def create_facebook_post(image_url, image_url_2, headline, source_name="NEWS", o
     if blur_y_start < 0:
         blur_y_start = 0
     bottom_crop = base_img.crop((0, blur_y_start, base_width, base_height))
-    bottom_blurred = bottom_crop.filter(ImageFilter.GaussianBlur(15))
+    bottom_blurred = bottom_crop.filter(ImageFilter.GaussianBlur(5))
     base_img.paste(bottom_blurred, (0, blur_y_start))
     
     draw = ImageDraw.Draw(base_img)
